@@ -17,3 +17,7 @@
 # fresh temporary build folder
 tmp/*
 tmp
+
+# don't push rss.xml created
+*.xml
+rss.xml

@@ -12,8 +12,15 @@ import (
 	"time"
 )
 
+func getLink() (URL string) {
+	fmt.Print("Put the URL to convert right here: ")
+	fmt.Scanln(&URL)
+	return URL
+}
+
 func main() {
-	generateRSS(scrape("https://www.buzzsprout.com/926791/6689873"))
+	selectedLink := getLink()
+	generateRSS(scrape(selectedLink))
 }
 
 func scrape(url string) (title, description, link string) {
