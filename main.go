@@ -17,14 +17,11 @@ import (
 
 func main() {
 	muxRouter := mux.NewRouter()
-	muxRouter.HandleFunc("/", slash)
-	muxRouter.HandleFunc("/converter", getLink)
-
+	muxRouter.HandleFunc("/", getLink)
 	err := http.ListenAndServe(":8080", muxRouter)
 	if err != nil {
 		panic(err)
 	}
-
 }
 
 func scrape(url string) (title, description, link string) {
@@ -92,29 +89,7 @@ func scrape(url string) (title, description, link string) {
 	// variables with the full document data can be garbage collected
 	pageDescription := []byte(pageContent[descriptionStartIndex:descriptionEndIndex])
 
-	linkStartIndex := strings.Index(pageContent, "download_link")
-	if linkStartIndex == -1 {
-		fmt.Println("No link element found")
-		os.Exit(0)
-	}
-	// The start index of the title is the index of the first
-	// character, the < symbol. We don't want to include
-	// <title> as part of the final value, so let's offset
-	// the index by the number of characers in <title>
-	linkStartIndex += 21
-
-	// Find the index of the closing tag
-	linkEndIndex := strings.Index(pageContent, "Download</a")
-	if linkEndIndex == -1 {
-		fmt.Println("No closing tag for description found.")
-		os.Exit(0)
-	}
-	linkEndIndex -= 71
-
-	// (Optional)
-	// Copy the substring in to a separate variable so the
-	// variables with the full document data can be garbage collected
-	pageLink := []byte(pageContent[linkStartIndex:linkEndIndex])
+	pageLink := url + dnsify(string(pageTitle))
 
 	return string(pageTitle), string(pageDescription), string(pageLink)
 }
@@ -149,51 +124,6 @@ func generateRSS(title, description, link string) {
 	}
 }
 
-func slash(w http.ResponseWriter, r *http.Request) {
-	//debug
-
-	fmt.Printf("%s", r.Method)
-
-	if r.Method == "GET" { //check if you only connect on the page
-		tpl, err := template.ParseFiles("html_template/welcome.html") //get template file
-		if err != nil {
-			log.Print("template parsing error: ", err)
-		}
-		err = tpl.Execute(w, nil) //present template file with variables
-		if err != nil {
-			log.Print("template executing error: ", err)
-		}
-	}
-}
-
-func getLink(w http.ResponseWriter, r *http.Request) {
-	//debug
-	fmt.Printf("%s", r.Method)
-
-	if r.Method == "POST" {
-		r.ParseForm()                                                   //get form variables
-		tpl, err := template.ParseFiles("html_template/startconv.html") //get template file
-		if err != nil {
-			log.Print("template parsing error: ", err)
-		}
-		//debug
-		fmt.Printf("%s", r.Form["bzsptURL"])
-		var convertURL custURL
-		convertURL = custURL{
-			URL: r.Form["bzsptURL"],
-		}
-		err = tpl.Execute(w, convertURL) //present template file with variables
-		if err != nil {
-			log.Print("template executing error: ", err)
-		}
-
-	}
-}
-
-type custURL struct {
-	URL []string
-}
-
 type rss struct {
 	Version       string `xml:"version,attr"`
 	Title         string `xml:"channel>title"`
@@ -209,4 +139,51 @@ type rssItem struct {
 	Link        string `xml:"link"`
 	Description string `xml:"description"`
 	Image       string `xml:"image"`
+}
+
+func dnsify(title string) (mp3link string) {
+
+	// Il manque des exception, genre "ê"
+	replaceSpace := strings.ReplaceAll(title, " ", "-")
+	toLower := strings.ToLower(replaceSpace)
+	replaceEAcute := strings.ReplaceAll(toLower, "é", "e")
+	replaceEGrave := strings.ReplaceAll(replaceEAcute, "è", "e")
+	replaceAAcute := strings.ReplaceAll(replaceEGrave, "à", "a")
+	replaceApostrophe := strings.ReplaceAll(replaceAAcute, "'", "-")
+	mp3Link := "-" + replaceApostrophe + ".mp3"
+
+	return mp3Link
+}
+
+func getLink(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET": //check if you only connect on the page
+		tpl, err := template.ParseFiles("html_template/welcome.html") //get template file
+		if err != nil {
+			log.Print("template parsing error: ", err)
+		}
+		err = tpl.Execute(w, nil) //present template file with variables
+		if err != nil {
+			log.Print("template executing error: ", err)
+		}
+	case "POST":
+		r.ParseForm() //get form variables
+
+		tpl, err := template.ParseFiles("html_template/startconv.html") //get template file
+		if err != nil {
+			log.Print("template parsing error: ", err)
+		}
+
+		URL := r.Form.Get("bzsptURL")
+
+		generateRSS(scrape(URL))
+
+		err = tpl.Execute(w, nil) //present template file with variables
+		if err != nil {
+			log.Print("template executing error: ", err)
+		}
+
+	default:
+		fmt.Printf("Unknown HTTP method : %s", r.Method)
+	}
 }
