@@ -9,18 +9,22 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 	"time"
+
+	"github.com/gorilla/mux"
 )
 
-func getLink() (URL string) {
-	fmt.Print("Put the URL to convert right here: ")
-	fmt.Scanln(&URL)
-	return URL
-}
-
 func main() {
-	selectedLink := getLink()
-	generateRSS(scrape(selectedLink))
+	muxRouter := mux.NewRouter()
+	muxRouter.HandleFunc("/", slash)
+	muxRouter.HandleFunc("/converter", getLink)
+
+	err := http.ListenAndServe(":8080", muxRouter)
+	if err != nil {
+		panic(err)
+	}
+
 }
 
 func scrape(url string) (title, description, link string) {
@@ -143,6 +147,51 @@ func generateRSS(title, description, link string) {
 	if err := ioutil.WriteFile(filepath.Join("./", "rss.xml"), rssFeed, 0644); err != nil {
 		fmt.Println(err)
 	}
+}
+
+func slash(w http.ResponseWriter, r *http.Request) {
+	//debug
+
+	fmt.Printf("%s", r.Method)
+
+	if r.Method == "GET" { //check if you only connect on the page
+		tpl, err := template.ParseFiles("html_template/welcome.html") //get template file
+		if err != nil {
+			log.Print("template parsing error: ", err)
+		}
+		err = tpl.Execute(w, nil) //present template file with variables
+		if err != nil {
+			log.Print("template executing error: ", err)
+		}
+	}
+}
+
+func getLink(w http.ResponseWriter, r *http.Request) {
+	//debug
+	fmt.Printf("%s", r.Method)
+
+	if r.Method == "POST" {
+		r.ParseForm()                                                   //get form variables
+		tpl, err := template.ParseFiles("html_template/startconv.html") //get template file
+		if err != nil {
+			log.Print("template parsing error: ", err)
+		}
+		//debug
+		fmt.Printf("%s", r.Form["bzsptURL"])
+		var convertURL custURL
+		convertURL = custURL{
+			URL: r.Form["bzsptURL"],
+		}
+		err = tpl.Execute(w, convertURL) //present template file with variables
+		if err != nil {
+			log.Print("template executing error: ", err)
+		}
+
+	}
+}
+
+type custURL struct {
+	URL []string
 }
 
 type rss struct {
