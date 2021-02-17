@@ -24,23 +24,22 @@ func main() {
 	}
 }
 
-func scrape(url string) (title, description, link string) {
-	// Create HTTP client with timeout
+func generateItem(url string) rssItem {
+	//func scrape(url string) (title, description, link string) {
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
-	// Make request
 	response, err := client.Get(url)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer response.Body.Close()
 
+	newRSS := rssItem{}
 	dataInBytes, err := ioutil.ReadAll(response.Body)
 	pageContent := string(dataInBytes)
 
-	// Find a substr
 	titleStartIndex := strings.Index(pageContent, "<title>")
 	if titleStartIndex == -1 {
 		fmt.Println("No title element found")
@@ -59,9 +58,6 @@ func scrape(url string) (title, description, link string) {
 		os.Exit(0)
 	}
 
-	// (Optional)
-	// Copy the substring in to a separate variable so the
-	// variables with the full document data can be garbage collected
 	pageTitle := []byte(pageContent[titleStartIndex:titleEndIndex])
 
 	// Find a substr
@@ -70,6 +66,9 @@ func scrape(url string) (title, description, link string) {
 		fmt.Println("No description element found")
 		os.Exit(0)
 	}
+
+	newRSS.Title = string(pageTitle)
+
 	// The start index of the title is the index of the first
 	// character, the < symbol. We don't want to include
 	// <title> as part of the final value, so let's offset
@@ -88,21 +87,20 @@ func scrape(url string) (title, description, link string) {
 	// Copy the substring in to a separate variable so the
 	// variables with the full document data can be garbage collected
 	pageDescription := []byte(pageContent[descriptionStartIndex:descriptionEndIndex])
+	newRSS.Description = string(pageDescription)
 
 	pageLink := url + dnsify(string(pageTitle))
+	newRSS.Link = string(pageLink)
 
-	return string(pageTitle), string(pageDescription), string(pageLink)
+	newRSS.Image = "https://storage.buzzsprout.com/variants/k1gf0b0yd0yqkiz0qt1t2zj4smv1/74cb75bab2243992e98fab5156007185827084cf97936f24c0c66a651388df90.jpg"
+
+	return newRSS
 }
 
-func generateRSS(title, description, link string) {
-	articles := []rssItem{
-		{
-			Title:       title,
-			Link:        link,
-			Description: description,
-			Image:       "https://storage.buzzsprout.com/variants/k1gf0b0yd0yqkiz0qt1t2zj4smv1/74cb75bab2243992e98fab5156007185827084cf97936f24c0c66a651388df90.jpg",
-		},
-	}
+func generateRSS(item rssItem) {
+
+	episodes := []rssItem{}
+	episodes = append(episodes, item)
 
 	rssStruct := &rss{
 		Version:       "2.0",
@@ -110,7 +108,7 @@ func generateRSS(title, description, link string) {
 		Link:          "https://electro-monkeys.fr/",
 		Description:   "Le podcast pour découvrir et comprendre les technologies et les concepts cloud natifs",
 		LastBuildDate: time.Now().Format(time.RFC1123Z),
-		Item:          articles,
+		Item:          episodes,
 	}
 
 	data, err := xml.MarshalIndent(rssStruct, "", "    ")
@@ -120,6 +118,32 @@ func generateRSS(title, description, link string) {
 
 	rssFeed := []byte(xml.Header + string(data))
 	if err := ioutil.WriteFile(filepath.Join("./", "rss.xml"), rssFeed, 0644); err != nil {
+		fmt.Println(err)
+	}
+}
+
+func getCurrentRSS() rss {
+	rssFeed := rss{}
+	data, err := ioutil.ReadFile(filepath.Join("./", "oldrss.xml"))
+	if err != nil {
+		fmt.Println(err)
+	}
+	if err = xml.Unmarshal(data, &rssFeed); err != nil {
+		fmt.Println(err)
+	}
+	return rssFeed
+}
+
+func appendNewRSS(item rssItem, rssFeed rss) {
+	rssFeed.Item = append(rssFeed.Item, item)
+
+	data, err := xml.MarshalIndent(rssFeed, "", "    ")
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	newRSSFeed := []byte(xml.Header + string(data))
+	if err := ioutil.WriteFile(filepath.Join("./", "rss.xml"), newRSSFeed, 0644); err != nil {
 		fmt.Println(err)
 	}
 }
@@ -176,7 +200,7 @@ func getLink(w http.ResponseWriter, r *http.Request) {
 
 		URL := r.Form.Get("bzsptURL")
 
-		generateRSS(scrape(URL))
+		appendNewRSS(generateItem(URL), getCurrentRSS())
 
 		err = tpl.Execute(w, nil) //present template file with variables
 		if err != nil {

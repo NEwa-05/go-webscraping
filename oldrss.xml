@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+    <channel>
+        <title>Eletro Monkeys Podcast</title>
+        <link>https://electro-monkeys.fr/</link>
+        <description>Le podcast pour découvrir et comprendre les technologies et les concepts cloud natifs</description>
+        <lastBuildDate>Wed, 17 Feb 2021 07:07:10 +0100</lastBuildDate>
+        <item>
+            <title>Kubernetes a changé la donne avec Alexis Ducastel</title>
+            <link>https://www.buzzsprout.com/926791/6689873-kubernetes-a-change-la-donne-avec-alexis-ducastel.mp3</link>
+            <description>Il n&#39;a fallu que trois ans à Kubernetes pour devenir fin 2017, le standard des plateformes d&#39;orchestration du marché. Et tandis que les conteneurs enflammaient le cœur des développeurs, Kubernetes lui partait à la conquête des entreprises.&lt;/p&gt;&lt;p&gt;Il est rare, pour ne pas dire inédit, qu&#39;un produit jouisse d&#39;une adoption aussi rapide, et il y a fort à parier qu&#39;un tel succès ne doive rien au hasard. Dès lors, qu&#39;est-ce qui justifie cet engouement pour Kubernetes et pour les conteneurs ? A quelles problématiques apportent-ils une réponse, aussi bien pour les devs que pour les ops ?&lt;/p&gt;&lt;p&gt;Cette semaine je reçois &lt;a href=&#34;https://twitter.com/infraBuilder&#34;&gt;Alexis Ducastel&lt;/a&gt;. Alexis est architecte infrastructure freelance, et fondateur d&#39;i&lt;a href=&#34;https://infrabuilder.com/&#34;&gt;nfraBuilder&lt;/a&gt;, et avec lui j&#39;aborde les différents points qui expliquent la popularité de Kubernetes, et pourquoi il a définitivement changé la donne.</description>
+            <image>https://storage.buzzsprout.com/variants/k1gf0b0yd0yqkiz0qt1t2zj4smv1/74cb75bab2243992e98fab5156007185827084cf97936f24c0c66a651388df90.jpg</image>
+        </item>
+    </channel>
+</rss>
