@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io/ioutil"
@@ -12,10 +14,14 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/google/go-github/github"
 	"github.com/gorilla/mux"
+
+	"golang.org/x/oauth2"
 )
 
 func main() {
+	githubAuth()
 	muxRouter := mux.NewRouter()
 	muxRouter.HandleFunc("/", getLink)
 	err := http.ListenAndServe(":8080", muxRouter)
@@ -210,4 +216,50 @@ func getLink(w http.ResponseWriter, r *http.Request) {
 	default:
 		fmt.Printf("Unknown HTTP method : %s", r.Method)
 	}
+}
+
+type clientInfo struct {
+	ClientID     string `json:"ClientID"`
+	ClientSecret string `json:"ClientSecret"`
+}
+
+func init() {
+
+	var clientEnv clientInfo
+	readFile, err := ioutil.ReadFile("./.env")
+	if err != nil {
+		fmt.Printf("Can't read file %s", err)
+	}
+
+	err = json.Unmarshal(readFile, &clientEnv)
+	if err != nil {
+		fmt.Printf("can't unmarshall json %s", err)
+	}
+
+	authConfig := &oauth2.Config{
+		ClientID:     clientEnv.ClientID,
+		ClientSecret: clientEnv.ClientSecret,
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  "http://localhost:9011/oauth2/authorize",
+			TokenURL: "http://localhost:9011/oauth2/token",
+		},
+	}
+
+}
+
+func githubAuth() {
+	ctx := context.Background()
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: "... your access token ..."},
+	)
+	tc := oauth2.NewClient(ctx, ts)
+
+	client := github.NewClient(tc)
+
+	gist, _, err := client.Gists.List(ctx, "", nil)
+	if err != nil {
+		log.Printf("Error getting Gist list: %s", err)
+	}
+
+	fmt.Printf("%v", gist)
 }

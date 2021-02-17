@@ -20,3 +20,6 @@ tmp
 
 # don't push rss.xml created
 rss.xml
+
+# don't push token and stuff from github
+.env
