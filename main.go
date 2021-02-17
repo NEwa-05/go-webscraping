@@ -142,6 +142,7 @@ func getCurrentRSS() rss {
 
 func appendNewRSS(item rssItem, rssFeed rss) {
 	rssFeed.Item = append(rssFeed.Item, item)
+	rssFeed.LastBuildDate = time.Now().Format(time.RFC1123Z)
 
 	data, err := xml.MarshalIndent(rssFeed, "", "    ")
 	if err != nil {
@@ -244,6 +245,8 @@ func init() {
 			TokenURL: "http://localhost:9011/oauth2/token",
 		},
 	}
+
+	_ = authConfig
 
 }
 
