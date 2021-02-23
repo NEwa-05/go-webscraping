@@ -21,5 +21,8 @@ tmp
 # don't push rss.xml created
 rss.xml
 
-# don't push token and stuff from github
+# don't push env info to github
 .env
+
+# don't push token to github
+token

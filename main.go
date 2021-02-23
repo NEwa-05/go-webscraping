@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -15,19 +18,37 @@ import (
 	"time"
 
 	"github.com/google/go-github/github"
+	gogit "github.com/google/go-github/github"
 	"github.com/gorilla/mux"
+	githuboauth "golang.org/x/oauth2/github"
 
 	"golang.org/x/oauth2"
 )
 
+var (
+	oauthConf = &oauth2.Config{
+		ClientID:     "",
+		ClientSecret: "",
+		Scopes:       []string{},
+		Endpoint:     oauth2.Endpoint{},
+		RedirectURL:  "",
+	}
+)
+
 func main() {
-	githubAuth()
+
+	getEnvInfo()
 	muxRouter := mux.NewRouter()
-	muxRouter.HandleFunc("/", getLink)
+	muxRouter.HandleFunc("/", handleMain)
+	muxRouter.HandleFunc("/auth/github/login", loginCallback)
+	muxRouter.HandleFunc("/auth/github/callback", authCallback)
+	muxRouter.HandleFunc("/info", getUserInfo)
+	fmt.Println("Listening on localhost:8080")
 	err := http.ListenAndServe(":8080", muxRouter)
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("Listening on 8080")
 }
 
 func generateItem(url string) rssItem {
@@ -186,10 +207,10 @@ func dnsify(title string) (mp3link string) {
 	return mp3Link
 }
 
-func getLink(w http.ResponseWriter, r *http.Request) {
+func getUserInfo(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET": //check if you only connect on the page
-		tpl, err := template.ParseFiles("html_template/welcome.html") //get template file
+		tpl, err := template.ParseFiles("html_template/userinfo.html") //get template file
 		if err != nil {
 			log.Print("template parsing error: ", err)
 		}
@@ -205,9 +226,11 @@ func getLink(w http.ResponseWriter, r *http.Request) {
 			log.Print("template parsing error: ", err)
 		}
 
-		URL := r.Form.Get("bzsptURL")
+		gistID := r.Form.Get("gistID")
+		gistFileName := r.Form.Get("gistFileName")
 
-		appendNewRSS(generateItem(URL), getCurrentRSS())
+		//getGistFile(gistID, gistFileName)
+		updateGistFile(gistID, gistFileName)
 
 		err = tpl.Execute(w, nil) //present template file with variables
 		if err != nil {
@@ -219,12 +242,84 @@ func getLink(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getGistFile(gistID, gistFileName string) {
+	client := github.NewClient(nil)
+	gistres, _, err := client.Gists.Get(context.Background(), gistID)
+	if err != nil {
+		log.Printf("can't get gist: %s", err)
+	}
+
+	getFileMap := gistres.Files[github.GistFilename(gistFileName)]
+	var gistFile GistFile
+	gistByte, err := json.Marshal(getFileMap)
+	if err != nil {
+		fmt.Print("cannot marshal new slot")
+	}
+	err = json.Unmarshal(gistByte, &gistFile)
+	if err != nil {
+		fmt.Print("cannot unmarshal new value")
+	}
+
+	downfile, err := os.Create(*gistFile.Filename)
+	if err != nil {
+		fmt.Printf("cannot create file: %s", err)
+	}
+
+	defer downfile.Close()
+
+	httpGet, err := http.Get(*gistFile.RawURL)
+	if err != nil {
+		fmt.Printf("can't do http get: %s", err)
+	}
+
+	defer httpGet.Body.Close()
+
+	_, err = io.Copy(downfile, httpGet.Body)
+	if err != nil {
+		fmt.Printf("cannot write to file: %s", err)
+	}
+
+}
+
+func updateGistFile(gistID, gistFileName string) {
+	fileByteContent, err := ioutil.ReadFile(gistFileName)
+	if err != nil {
+		fmt.Printf("cannot read file: %s", err)
+	}
+	fileStringContent := string(fileByteContent)
+
+	input := &gogit.Gist{
+		Files: map[gogit.GistFilename]gogit.GistFile{
+			gogit.GistFilename(gistFileName): {Content: &fileStringContent},
+		},
+	}
+
+	cookieToken, err := ioutil.ReadFile("./token")
+	if err != nil {
+		fmt.Printf("cannot read token from file: %s", err)
+	}
+	var token *oauth2.Token
+	err = json.Unmarshal(cookieToken, &token)
+	if err != nil {
+		fmt.Printf("cannot unmarshal token: %s", err)
+	}
+	ts := oauth2.StaticTokenSource(token)
+	oauthClient := oauth2.NewClient(oauth2.NoContext, ts)
+	client := gogit.NewClient(oauthClient)
+	_, resp, err := client.Gists.Edit(context.Background(), gistID, input)
+	if err != nil {
+		log.Printf("can't get gist: %s", err)
+	}
+
+	fmt.Printf("test: %v", resp)
+}
+
 type clientInfo struct {
 	ClientID     string `json:"ClientID"`
 	ClientSecret string `json:"ClientSecret"`
 }
 
-func init() {
+func getEnvInfo() {
 
 	var clientEnv clientInfo
 	readFile, err := ioutil.ReadFile("./.env")
@@ -234,35 +329,73 @@ func init() {
 
 	err = json.Unmarshal(readFile, &clientEnv)
 	if err != nil {
-		fmt.Printf("can't unmarshall json %s", err)
+		fmt.Printf("can't unmarshall json: %s", err)
 	}
 
-	authConfig := &oauth2.Config{
+	oauthConf = &oauth2.Config{
 		ClientID:     clientEnv.ClientID,
 		ClientSecret: clientEnv.ClientSecret,
-		Endpoint: oauth2.Endpoint{
-			AuthURL:  "http://localhost:9011/oauth2/authorize",
-			TokenURL: "http://localhost:9011/oauth2/token",
-		},
+		Scopes:       []string{"user:email", "gist"},
+		RedirectURL:  "http://localhost:8080/auth/github/callback",
+		Endpoint:     githuboauth.Endpoint,
 	}
-
-	_ = authConfig
 
 }
 
-func githubAuth() {
-	ctx := context.Background()
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: "... your access token ..."},
-	)
-	tc := oauth2.NewClient(ctx, ts)
-
-	client := github.NewClient(tc)
-
-	gist, _, err := client.Gists.List(ctx, "", nil)
+func handleMain(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	tpl, err := template.ParseFiles("html_template/home.html") //get template file
 	if err != nil {
-		log.Printf("Error getting Gist list: %s", err)
+		log.Print("template parsing error: ", err)
+	}
+	err = tpl.Execute(w, nil) //present template file with variables
+	if err != nil {
+		log.Print("template executing error: ", err)
+	}
+}
+
+// login
+func loginCallback(w http.ResponseWriter, r *http.Request) {
+	oauthState := generateStateOauthCookie(w)
+	url := oauthConf.AuthCodeURL(oauthState)
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+}
+
+func generateStateOauthCookie(w http.ResponseWriter) string {
+	var expiration = time.Now().Add(20 * time.Minute)
+	b := make([]byte, 16)
+	rand.Read(b)
+	state := base64.URLEncoding.EncodeToString(b)
+	cookie := http.Cookie{Name: "oauthstate", Value: state, Expires: expiration}
+	http.SetCookie(w, &cookie)
+	return state
+}
+
+// /authCallback Called by github after authorization is granted
+func authCallback(w http.ResponseWriter, r *http.Request) {
+
+	oauthState, _ := r.Cookie("oauthstate")
+
+	if r.FormValue("state") != oauthState.Value {
+		log.Println("invalid oauth github state")
+		http.Redirect(w, r, "/tutu", http.StatusTemporaryRedirect)
+		return
 	}
 
-	fmt.Printf("%v", gist)
+	code := r.FormValue("code")
+	token, err := oauthConf.Exchange(oauth2.NoContext, code)
+
+	if err != nil {
+		log.Println("cannot craete token")
+		return
+	}
+	bytesToken, err := json.Marshal(token)
+	if err != nil {
+		fmt.Printf("cannot marshal token: %s", err)
+	}
+	ioutil.WriteFile("./token", bytesToken, 0755)
+
+	http.Redirect(w, r, "/info", http.StatusTemporaryRedirect)
+
 }
